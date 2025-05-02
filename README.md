@@ -48,8 +48,9 @@ cd <project-folder>
   GOOGLE_API_KEY=your_api_key_here
   ```
 ## 3. Running the App:
+1. Create a Virtual Environment
 
-After setting up the API key and installing the dependencies, you can run the Streamlit app locally:
+2.After setting up the API key and installing the dependencies, you can run the Streamlit app locally:
  ```bash
 streamlit run app.py
  ```
