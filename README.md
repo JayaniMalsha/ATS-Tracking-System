@@ -35,8 +35,8 @@ pip install streamlit google-generativeai pdf2image Pillow python-dotenv
 ## 1. Clone the Repository:
 
 ```bash
-git clone <your-repository-url>
-cd <your-project-folder>
+git clone <my-repository-url>
+cd <project-folder>
 ```
 ## 2. Set up Google API Key:
 
