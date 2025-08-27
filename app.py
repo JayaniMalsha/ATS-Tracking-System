@@ -3,9 +3,9 @@ import os
 import base64
 import streamlit as st
 import io
-import pdf2image
 import google.generativeai as genai
 from PIL import Image
+import fitz  # PyMuPDF
 
 # Load environment variables
 load_dotenv()
@@ -96,40 +96,51 @@ st.markdown("""
 st.markdown("<hr>", unsafe_allow_html=True)
 
 # API Key
-api_key = os.getenv("GOOGLE_API_KEY")
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    api_key = os.getenv("GOOGLE_API_KEY")
+
 if not api_key:
-    st.error("🔑 API Key not found. Please check your .env file.")
+    st.error("🔑 API Key not found. Please check your .env file or Streamlit Secrets.")
 else:
     genai.configure(api_key=api_key)
 
-# PDF processing
+# PDF processing using PyMuPDF
 def input_pdf_setup(file):
     file_bytes = file.getvalue()
-    images = pdf2image.convert_from_bytes(file_bytes)
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    page = doc.load_page(0)  # first page
+    pix = page.get_pixmap()
+    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
     img_byte_arr = io.BytesIO()
-    images[0].save(img_byte_arr, format='JPEG')
+    img.save(img_byte_arr, format='JPEG')
     encoded_img = base64.b64encode(img_byte_arr.getvalue()).decode()
     return [{"mime_type": "image/jpeg", "data": encoded_img}]
 
 # Gemini API call
-def get_gemini_response(input, pdf_content, prompt):
+def get_gemini_response(input_text, pdf_content, prompt):
     model = genai.GenerativeModel('gemini-1.5-flash')
-    response = model.generate_content([input, pdf_content[0], prompt])
+    response = model.generate_content([input_text, pdf_content[0], prompt])
     return response.text
 
-# === SECTION: Upload Resume ===
+# === Upload Resume ===
 st.markdown('<div class="sub-header">📄 Upload Your Resume</div>', unsafe_allow_html=True)
 uploaded_file = st.file_uploader("Upload your resume (PDF only)", type=["pdf"])
 
 if uploaded_file:
     st.markdown('<div class="success-message">✅ Resume uploaded successfully!</div>', unsafe_allow_html=True)
     try:
-        preview = pdf2image.convert_from_bytes(uploaded_file.getvalue(), first_page=1, last_page=1)
-        st.image(preview[0], width=250, caption="Resume Preview")
+        preview_img = input_pdf_setup(uploaded_file)
+        st.image(
+            Image.open(io.BytesIO(base64.b64decode(preview_img[0]["data"]))),
+            width=250,
+            caption="Resume Preview"
+        )
     except Exception as e:
         st.warning(f"Preview error: {e}")
 
-# === SECTION: Enter Job Description ===
+# === Enter Job Description ===
 st.markdown('<div class="sub-header">📋 Enter Job Description</div>', unsafe_allow_html=True)
 input_text = st.text_area(
     "Paste the job description here (e.g., Responsibilities, Qualifications, etc.):",
@@ -138,9 +149,8 @@ input_text = st.text_area(
     help="Include the job title, responsibilities, qualifications, and key skills required"
 )
 
-# === SECTION: Analysis Options ===
+# === Analysis Options ===
 st.markdown('<div class="sub-header">🔍 Analysis Options</div>', unsafe_allow_html=True)
-
 col1, col2 = st.columns([1, 1])
 with col1:
     submit1 = st.button("📊 Detailed Analysis")
@@ -173,7 +183,7 @@ You are an advanced ATS scanner. Analyze the resume vs job description:
 Start with MATCH PERCENTAGE at the top.
 """
 
-# === SECTION: Results ===
+# === Results ===
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.markdown("### 📈 Results")
 
@@ -187,7 +197,7 @@ if submit1 or submit3:
             try:
                 pdf_content = input_pdf_setup(uploaded_file)
                 prompt = input_prompt1 if submit1 else input_prompt3
-                response = get_gemini_response(prompt, pdf_content, input_text)
+                response = get_gemini_response(input_text, pdf_content, prompt)
 
                 st.markdown("## 📝 Analysis Result" if submit1 else "## 🎯 Match Analysis")
                 st.markdown('<div class="result-container">', unsafe_allow_html=True)
@@ -211,7 +221,7 @@ if submit1 or submit3:
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# === FOOTER ===
+# === Footer ===
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align: center; color: #6c757d; padding: 20px;">
@@ -221,7 +231,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# === SIDEBAR ===
+# === Sidebar ===
 with st.sidebar:
     st.markdown("### 💡 Tips for Success")
     st.markdown("""
